@@ -3,6 +3,8 @@ import { bookingQueue } from "./queue";
 import { nextBookingWindowOpen, msUntilOpen } from "./timing";
 import type { BookingRequest, GolfCourse } from "@prisma/client";
 
+type DayOfWeek = "SUNDAY" | "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY";
+
 export type BookingJobPayload = {
   bookingJobId: string;
   requestId: string;
@@ -20,7 +22,7 @@ export async function scheduleNextBooking(
   if (!request.isActive) return;
 
   const { openAt, targetDate } = nextBookingWindowOpen({
-    dayOfWeek: request.dayOfWeek,
+    dayOfWeek: request.dayOfWeek as DayOfWeek,
     timezone: request.course.timezone,
     bookingWindowDays: request.course.bookingWindowDays,
     bookingOpenTime: request.course.bookingOpenTime,

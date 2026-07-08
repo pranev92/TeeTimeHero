@@ -1,19 +1,19 @@
-// This is your Prisma schema file
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String   @id @default(cuid())
+  email         String   @unique
   name          String?
   passwordHash  String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   bookingRequests BookingRequest[]
   accounts        Account[]
@@ -22,19 +22,18 @@ model User {
   @@map("users")
 }
 
-// NextAuth session/account tables (needed by @auth/prisma-adapter)
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -70,7 +69,6 @@ model GolfCourse {
   bookingUrl        String?
   timezone          String   @default("America/New_York")
   bookingWindowDays Int      @default(7)
-  // Time in HH:MM format (local to course timezone) when booking opens
   bookingOpenTime   String   @default("00:20")
   requiresLogin     Boolean  @default(true)
   isActive          Boolean  @default(true)
@@ -81,41 +79,32 @@ model GolfCourse {
   @@map("golf_courses")
 }
 
-enum DayOfWeek {
-  SUNDAY
-  MONDAY
-  TUESDAY
-  WEDNESDAY
-  THURSDAY
-  FRIDAY
-  SATURDAY
-}
+// SQLite has no native enum; store as String and validate in app code
+// Valid values: SUNDAY MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY
+// Valid job status: PENDING RUNNING SUCCESS FAILED CANCELLED
+// Valid log level: INFO WARN ERROR
 
 model BookingRequest {
-  id              String    @id @default(cuid())
-  userId          String
-  courseId        String
+  id            String  @id @default(cuid())
+  userId        String
+  courseId      String
 
-  // Schedule
-  dayOfWeek       DayOfWeek
-  preferredTime   String    // HH:MM local to course
-  windowStart     String    // HH:MM — earliest acceptable tee time
-  windowEnd       String    // HH:MM — latest acceptable tee time
+  dayOfWeek     String  // DayOfWeek enum value
+  preferredTime String
+  windowStart   String
+  windowEnd     String
 
-  // Players
-  numPlayers      Int       @default(1)
-  golferNames     String[]  @default([])
+  numPlayers    Int     @default(1)
+  golferNames   String  @default("[]") // JSON array stored as text
 
-  // State
-  isActive        Boolean   @default(true)
-  priority        Int       @default(0) // lower = higher priority when multiple requests
+  isActive      Boolean @default(true)
+  priority      Int     @default(0)
 
-  // Credentials for booking site (encrypted at rest)
-  siteUsername    String?
-  sitePassword    String?   // stored encrypted via field-level encryption
+  siteUsername  String?
+  sitePassword  String?
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   course GolfCourse @relation(fields: [courseId], references: [id])
@@ -124,37 +113,26 @@ model BookingRequest {
   @@map("booking_requests")
 }
 
-enum JobStatus {
-  PENDING
-  RUNNING
-  SUCCESS
-  FAILED
-  CANCELLED
-}
-
 model BookingJob {
-  id              String    @id @default(cuid())
-  requestId       String
+  id            String   @id @default(cuid())
+  requestId     String
 
-  // When this job fires vs. the actual tee time being targeted
-  scheduledFor    DateTime  // exact moment booking window opens
-  targetDate      DateTime  // the Sunday/Saturday the user wants to play
+  scheduledFor  DateTime
+  targetDate    DateTime
 
-  status          JobStatus @default(PENDING)
-  attempts        Int       @default(0)
-  maxAttempts     Int       @default(3)
+  status        String   @default("PENDING") // JobStatus enum value
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3)
 
-  // Result data
-  confirmedTime   String?   // actual tee time booked (HH:MM)
-  confirmationId  String?   // booking confirmation number
-  errorMessage    String?
+  confirmedTime  String?
+  confirmationId String?
+  errorMessage   String?
 
-  startedAt       DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime  @default(now())
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
 
-  // BullMQ job ID for cancellation
-  bullJobId       String?
+  bullJobId    String?
 
   request BookingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   logs    BookingLog[]
@@ -164,18 +142,12 @@ model BookingJob {
   @@map("booking_jobs")
 }
 
-enum LogLevel {
-  INFO
-  WARN
-  ERROR
-}
-
 model BookingLog {
   id        String   @id @default(cuid())
   jobId     String
-  level     LogLevel @default(INFO)
+  level     String   @default("INFO") // LogLevel enum value
   message   String
-  data      Json?
+  data      String?  // JSON stored as text
   createdAt DateTime @default(now())
 
   job BookingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)

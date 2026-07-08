@@ -47,3 +47,4 @@ screenshots/
 
 # allow .env.example
 !.env.example
+dev.db

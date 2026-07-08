@@ -45,6 +45,8 @@ export interface TeeTimeRate {
   greenFeeWalking?: number;
   dueOnlineRiding?: number;
   dueOnlineWalking?: number;
+  transactionFees: number;
+  isSimulator: boolean;
 }
 
 export interface TeeTimeSlot {
@@ -70,8 +72,9 @@ export interface CartResponse {
 
 export interface CartItem {
   id: string;
-  rateId: number;
-  players: number;
+  facilityId: number;
+  type: string;
+  extra: Record<string, unknown>;
 }
 
 export interface OrderResponse {
@@ -138,25 +141,52 @@ export class KennaClient {
 
   async addCartItem(
     cartId: string,
-    rateId: number,
-    gncFacilityId: number,
+    slot: TeeTimeSlot,
+    rate: TeeTimeRate,
     players: number,
-    teeTimeUtc: string,
-    courseId: string
+    facilityId: number
   ): Promise<CartItem> {
-    return this.req<CartItem>("POST", `/shopping-cart/${cartId}/cart-item`, {
-      rateId,
-      gncFacilityId,
-      players,
-      teeTime: teeTimeUtc,
-      courseId,
+    const isCart = rate.tags.includes("CI") || rate.tags.includes("MO");
+    const price = isCart
+      ? (rate.greenFeeCart ?? 0) / 100
+      : (rate.greenFeeWalking ?? 0) / 100;
+
+    // API returns the full cart, not just the new item
+    const cart = await this.req<CartResponse>("POST", `/shopping-cart/${cartId}/cart-item`, {
+      item: {
+        facilityId,
+        type: "TeeTime",
+        extra: {
+          teetime: slot.teetime,
+          players,
+          groupSize: players,
+          isPnasSelected: false,
+          price,
+          rate: {
+            holes: rate.holes,
+            price,
+            rateId: rate._id,
+            rateSetId: rate.golfnow.GolfCourseId,
+            name: rate.name,
+            transactionFees: rate.transactionFees,
+            transportation: isCart ? "Cart" : "Walking",
+            isSimulator: rate.isSimulator,
+          },
+          productLineups: [],
+          slots: [],
+        },
+      },
     });
+    const item = cart.items[cart.items.length - 1];
+    if (!item) throw new Error("No cart item returned after add");
+    return item;
   }
 
   async isBookable(cartId: string, itemId: string): Promise<{ bookable: boolean }> {
     return this.req<{ bookable: boolean }>(
       "POST",
-      `/shopping-cart/${cartId}/cart-item/${itemId}/is-bookable`
+      `/shopping-cart/${cartId}/cart-item/${itemId}/is-bookable`,
+      { reservationCountsByTime: {} }
     );
   }
 
@@ -187,10 +217,23 @@ export class KennaClient {
   // ── Order ─────────────────────────────────────────────────────────────────
 
   async createOrder(cartId: string): Promise<OrderResponse> {
-    return this.req<OrderResponse>("POST", "/orders", { cartId });
+    return this.req<OrderResponse>("POST", "/orders", { language: "en", cartId });
   }
 
-  async orderTeeTime(orderId: string, cartId: string): Promise<OrderResponse> {
-    return this.req<OrderResponse>("POST", "/order-teetime", { orderId, cartId });
+  // cartId + cartItemId link this to the order created by createOrder
+  async orderTeeTime(
+    cartId: string,
+    cartItemId: string,
+    teeTimeUtc: string,
+    rateId: number,
+    players: number
+  ): Promise<OrderResponse> {
+    return this.req<OrderResponse>("POST", "/order-teetime", {
+      teetime: teeTimeUtc,
+      rateId,
+      cartId,
+      cartItemId,
+      golferQuantity: players,
+    });
   }
 }

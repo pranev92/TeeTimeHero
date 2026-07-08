@@ -20,8 +20,6 @@ const FACILITY_ID  = 1745;
 const COURSE_ID    = "54f14bf00c8ad60378b01a11";
 const ALIAS        = "browns-mill-fore-passholder";
 const TZ           = "America/New_York";
-const CART_COURSE_ID    = 135358; // "MO" / "CI" tag — riding
-const WALKING_COURSE_ID = 135355; // "WR" tag — walking
 
 export class BrownsMillForePassAutomation {
   async attempt(opts: BookingOptions): Promise<BookingResult> {
@@ -55,20 +53,12 @@ export class BrownsMillForePassAutomation {
 
       const { slot, rate } = best;
       const localTime = toLocalHHMM(slot.teetime, TZ);
-      const gncFacilityId = rate.golfnow.GolfCourseId;
 
       // 4. Create shopping cart
       const cart = await client.createCart();
 
       // 5. Add the selected tee time to the cart
-      const item = await client.addCartItem(
-        cart.id,
-        rate._id,
-        gncFacilityId,
-        opts.numPlayers,
-        slot.teetime,
-        COURSE_ID
-      );
+      const item = await client.addCartItem(cart.id, slot, rate, opts.numPlayers, FACILITY_ID);
 
       // 6. Lock the tee time slot
       await client.lockTeeTime(COURSE_ID, dateStr, localTime, rate._id, opts.numPlayers);
@@ -80,10 +70,10 @@ export class BrownsMillForePassAutomation {
       }
 
       // 8. Place the order
-      const order = await client.createOrder(cart.id);
+      await client.createOrder(cart.id);
 
       // 9. Finalize the tee time booking
-      const final = await client.orderTeeTime(order.id, cart.id);
+      const final = await client.orderTeeTime(cart.id, item.id, slot.teetime, rate._id, opts.numPlayers);
 
       return {
         success: true,

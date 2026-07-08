@@ -10,7 +10,7 @@ const updateSchema = z.object({
   windowStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   windowEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   numPlayers: z.number().int().min(1).max(4).optional(),
-  golferNames: z.array(z.string()).optional(),
+  golferNames: z.array(z.string()).transform((v) => JSON.stringify(v)).optional(),
   priority: z.number().int().optional(),
 });
 

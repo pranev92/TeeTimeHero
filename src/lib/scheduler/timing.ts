@@ -1,6 +1,7 @@
-import { addDays, nextDay, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
+import { addDays, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
-import { DayOfWeek } from "@prisma/client";
+
+type DayOfWeek = "SUNDAY" | "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY";
 
 const DAY_INDEX: Record<DayOfWeek, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   SUNDAY: 0,

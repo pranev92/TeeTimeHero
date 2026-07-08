@@ -70,14 +70,7 @@ async function main() {
     ?? testSlot.rates[0];
 
   console.log(`\n4. Adding tee time ${localTime(testSlot.teetime)} to cart (rate ${rate._id})...`);
-  const item = await client.addCartItem(
-    cart.id,
-    rate._id,
-    rate.golfnow.GolfCourseId,
-    1,
-    testSlot.teetime,
-    "54f14bf00c8ad60378b01a11"
-  );
+  const item = await client.addCartItem(cart.id, testSlot, rate, 1, FACILITY_ID);
   console.log(`   ✓ Cart item added: ${item.id}`);
 
   console.log("\n5. Checking if bookable...");

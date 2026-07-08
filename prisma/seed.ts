@@ -1,6 +1,10 @@
+import path from "path";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+const dbPath = path.resolve(__dirname, "../dev.db");
+const adapter = new PrismaLibSql({ url: `file:${dbPath}` });
+const db = new PrismaClient({ adapter });
 
 async function main() {
   await db.golfCourse.upsert({

@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
     const request = await db.bookingRequest.create({
-      data: { ...data, userId: session.user.id },
+      data: { ...data, golferNames: JSON.stringify(data.golferNames), userId: session.user.id },
       include: { course: true },
     });
 

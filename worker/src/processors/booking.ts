@@ -5,14 +5,14 @@ import { scheduleNextBooking } from "@/lib/scheduler";
 import type { BookingJobPayload } from "@/lib/scheduler";
 
 async function log(jobId: string, level: "INFO" | "WARN" | "ERROR", message: string, data?: object) {
-  await db.bookingLog.create({ data: { jobId, level, message, data } });
+  await db.bookingLog.create({ data: { jobId, level, message, data: data ? JSON.stringify(data) : undefined } });
   const prefix = `[${level}][job:${jobId}]`;
   if (level === "ERROR") console.error(prefix, message, data ?? "");
   else console.log(prefix, message, data ?? "");
 }
 
 export async function processBookingJob(job: Job<BookingJobPayload>) {
-  const { bookingJobId, requestId, courseId, targetDate } = job.data;
+  const { bookingJobId, requestId, targetDate } = job.data;
 
   // Mark running
   await db.bookingJob.update({
@@ -44,7 +44,7 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
     windowStart: request.windowStart,
     windowEnd: request.windowEnd,
     numPlayers: request.numPlayers,
-    golferNames: request.golferNames,
+    golferNames: JSON.parse(request.golferNames) as string[],
     siteUsername: request.siteUsername ?? undefined,
     sitePassword: request.sitePassword ?? undefined,
   });

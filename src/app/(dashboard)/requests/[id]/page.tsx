@@ -64,7 +64,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
           { label: "Players", value: String(request.numPlayers) },
           { label: "Priority", value: String(request.priority) },
           { label: "Booking opens", value: `${request.course.bookingWindowDays}d before at ${formatTime(request.course.bookingOpenTime)}` },
-          { label: "Golfers", value: request.golferNames.length ? request.golferNames.join(", ") : "—" },
+          { label: "Golfers", value: (() => { const n: string[] = JSON.parse(request.golferNames); return n.length ? n.join(", ") : "—"; })() },
         ].map(({ label, value }) => (
           <div key={label}>
             <p className="text-xs text-zinc-500">{label}</p>
