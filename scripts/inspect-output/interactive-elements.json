@@ -1,0 +1,188 @@
+[
+  {
+    "tag": "a",
+    "type": "",
+    "class": "screen-reader-shortcut",
+    "text": "Skip to primary navigation"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "screen-reader-shortcut",
+    "text": "Skip to main content"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "screen-reader-shortcut",
+    "text": "Skip to footer"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "CITY OF ATLANTA GOLF"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "CITY OF ATLANTA GOLF"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "HOME"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "OUR GOLF COURSES"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Alfred “Tup” Holmes Golf Course"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Browns Mill Golf Course"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Candler Park Golf Course"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "FootGolf at Candler Park"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Chastain Park Golf Course"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "RATES"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Rates"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Youth on Course"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "FORE PASS"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "GOLF PROGRAMS"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Summer Programming"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Fall Programming"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "Spring Programming"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "CALENDAR"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "COURSE UPDATES"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "",
+    "text": "CONTACT US"
+  },
+  {
+    "tag": "input",
+    "type": "hidden",
+    "name": "redirect_to",
+    "class": ""
+  },
+  {
+    "tag": "input",
+    "type": "password",
+    "id": "pwbox-179",
+    "name": "post_password",
+    "class": ""
+  },
+  {
+    "tag": "input",
+    "type": "submit",
+    "name": "Submit",
+    "class": ""
+  },
+  {
+    "tag": "li",
+    "type": "",
+    "class": "wp-social-link wp-social-link-facebook  wp-block-social-link",
+    "text": "Facebook"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "wp-block-social-link-anchor",
+    "text": "Facebook"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": "wp-block-social-link-anchor",
+    "text": "Twitter"
+  },
+  {
+    "tag": "a",
+    "type": "",
+    "class": ""
+  },
+  {
+    "tag": "div",
+    "id": "noteefy-widget-v2",
+    "class": "noteefy-widget-closed",
+    "text": "City of Atlanta Tee Time Waitlist"
+  }
+]

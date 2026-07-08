@@ -4,13 +4,13 @@ const db = new PrismaClient();
 
 async function main() {
   await db.golfCourse.upsert({
-    where: { slug: "browns-mill" },
+    where: { slug: "browns-mill-fore-pass" },
     update: {},
     create: {
-      name: "Browns Mill Golf Course",
-      slug: "browns-mill",
-      websiteUrl: "https://www.brownsmillgc.com",
-      bookingUrl: "https://www.brownsmillgc.com/tee-times",
+      name: "Browns Mill Golf Course (Fore Pass)",
+      slug: "browns-mill-fore-pass",
+      websiteUrl: "https://www.cityofatlantagolf.com/browns-mill-fore-pass-member-tee-times/",
+      bookingUrl: "https://browns-mill-fore-passholder.book.teeitup.golf/",
       timezone: "America/New_York",
       bookingWindowDays: 7,
       bookingOpenTime: "00:20",
