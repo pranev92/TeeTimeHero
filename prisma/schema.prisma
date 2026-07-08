@@ -1,0 +1,185 @@
+// This is your Prisma schema file
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  bookingRequests BookingRequest[]
+  accounts        Account[]
+  sessions        Session[]
+
+  @@map("users")
+}
+
+// NextAuth session/account tables (needed by @auth/prisma-adapter)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model GolfCourse {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  websiteUrl        String
+  bookingUrl        String?
+  timezone          String   @default("America/New_York")
+  bookingWindowDays Int      @default(7)
+  // Time in HH:MM format (local to course timezone) when booking opens
+  bookingOpenTime   String   @default("00:20")
+  requiresLogin     Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  bookingRequests BookingRequest[]
+
+  @@map("golf_courses")
+}
+
+enum DayOfWeek {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+model BookingRequest {
+  id              String    @id @default(cuid())
+  userId          String
+  courseId        String
+
+  // Schedule
+  dayOfWeek       DayOfWeek
+  preferredTime   String    // HH:MM local to course
+  windowStart     String    // HH:MM — earliest acceptable tee time
+  windowEnd       String    // HH:MM — latest acceptable tee time
+
+  // Players
+  numPlayers      Int       @default(1)
+  golferNames     String[]  @default([])
+
+  // State
+  isActive        Boolean   @default(true)
+  priority        Int       @default(0) // lower = higher priority when multiple requests
+
+  // Credentials for booking site (encrypted at rest)
+  siteUsername    String?
+  sitePassword    String?   // stored encrypted via field-level encryption
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course GolfCourse @relation(fields: [courseId], references: [id])
+  jobs   BookingJob[]
+
+  @@map("booking_requests")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model BookingJob {
+  id              String    @id @default(cuid())
+  requestId       String
+
+  // When this job fires vs. the actual tee time being targeted
+  scheduledFor    DateTime  // exact moment booking window opens
+  targetDate      DateTime  // the Sunday/Saturday the user wants to play
+
+  status          JobStatus @default(PENDING)
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(3)
+
+  // Result data
+  confirmedTime   String?   // actual tee time booked (HH:MM)
+  confirmationId  String?   // booking confirmation number
+  errorMessage    String?
+
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  // BullMQ job ID for cancellation
+  bullJobId       String?
+
+  request BookingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  logs    BookingLog[]
+
+  @@index([scheduledFor])
+  @@index([status])
+  @@map("booking_jobs")
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model BookingLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  level     LogLevel @default(INFO)
+  message   String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  job BookingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("booking_logs")
+}
