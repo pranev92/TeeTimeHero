@@ -28,7 +28,6 @@ export async function scheduleNextBooking(
     bookingOpenTime: request.course.bookingOpenTime,
   });
 
-  // Create the DB record first
   const job = await db.bookingJob.create({
     data: {
       requestId: request.id,
@@ -40,17 +39,20 @@ export async function scheduleNextBooking(
 
   const delay = msUntilOpen(openAt);
 
-  const bullJob = await bookingQueue.add(
-    "book-tee-time",
-    { bookingJobId: job.id, requestId: request.id, courseId: request.courseId, targetDate: targetDate.toISOString() } satisfies BookingJobPayload,
-    { delay, jobId: `booking-${job.id}` }
-  );
-
-  // Write the BullMQ job ID back so we can cancel it later
-  await db.bookingJob.update({
-    where: { id: job.id },
-    data: { bullJobId: bullJob.id },
-  });
+  try {
+    const bullJob = await bookingQueue.add(
+      "book-tee-time",
+      { bookingJobId: job.id, requestId: request.id, courseId: request.courseId, targetDate: targetDate.toISOString() } satisfies BookingJobPayload,
+      { delay, jobId: `booking-${job.id}` }
+    );
+    await db.bookingJob.update({
+      where: { id: job.id },
+      data: { bullJobId: bullJob.id },
+    });
+  } catch (err) {
+    await db.bookingJob.delete({ where: { id: job.id } });
+    throw err;
+  }
 }
 
 /**

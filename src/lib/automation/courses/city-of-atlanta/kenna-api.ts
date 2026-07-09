@@ -201,16 +201,13 @@ export class KennaClient {
 
   async lockTeeTime(
     courseId: string,
-    localDate: string,
-    localTime: string,
-    rateId: number,
+    teeTimeUtc: string,
     players: number
   ): Promise<void> {
     await this.req<void>("PUT", `/course/${courseId}/tee-time/lock`, {
-      localDate,
-      localTime,
-      rateId,
-      players,
+      teetime: teeTimeUtc,
+      slots: players,
+      expiresIn: 10,
     });
   }
 

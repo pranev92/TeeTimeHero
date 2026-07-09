@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +24,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, inviteCode }),
     });
 
     if (!res.ok) {
@@ -77,6 +78,14 @@ export default function RegisterPage() {
             onChange={(e) => setPassword(e.target.value)}
             minLength={8}
             required
+          />
+          <Input
+            label="Invite Code"
+            type="text"
+            id="inviteCode"
+            placeholder="Enter your invite code"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
           />
 
           {error && (

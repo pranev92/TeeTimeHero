@@ -12,7 +12,7 @@
  */
 
 import { format, parseISO } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { KennaClient, TeeTimeSlot, TeeTimeRate } from "./kenna-api";
 import type { BookingOptions, BookingResult } from "../../base";
 
@@ -34,7 +34,7 @@ export class BrownsMillForePassAutomation {
       await client.authenticate(opts.siteUsername, opts.sitePassword);
 
       // 2. Fetch available tee times for the target date
-      const dateStr = format(opts.targetDate, "yyyy-MM-dd");
+      const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
       const teeTimes = await client.getTeeTimes(dateStr, FACILITY_ID);
       const slots: TeeTimeSlot[] = teeTimes.flatMap((d) => d.teetimes);
 
@@ -61,7 +61,7 @@ export class BrownsMillForePassAutomation {
       const item = await client.addCartItem(cart.id, slot, rate, opts.numPlayers, FACILITY_ID);
 
       // 6. Lock the tee time slot
-      await client.lockTeeTime(COURSE_ID, dateStr, localTime, rate._id, opts.numPlayers);
+      await client.lockTeeTime(COURSE_ID, slot.teetime, opts.numPlayers);
 
       // 7. Verify it's still bookable
       const { bookable } = await client.isBookable(cart.id, item.id);
@@ -119,14 +119,13 @@ function selectBestSlot(
     if (slotMin < windowStartMin || slotMin > windowEndMin) continue;
     if (slot.maxPlayers < opts.numPlayers) continue;
 
-    // Prefer cart rate if available, fall back to walking
-    const cartRate = slot.rates.find(
-      (r) => r.tags.includes("CI") && r.allowedPlayers.includes(opts.numPlayers)
-    );
     const walkRate = slot.rates.find(
       (r) => r.tags.includes("WR") && r.allowedPlayers.includes(opts.numPlayers)
     );
-    const rate = cartRate ?? walkRate;
+    const cartRate = slot.rates.find(
+      (r) => (r.tags.includes("CI") || r.tags.includes("MO")) && r.allowedPlayers.includes(opts.numPlayers)
+    );
+    const rate = walkRate ?? cartRate;
     if (!rate) continue;
 
     const diff = Math.abs(slotMin - preferredMin);

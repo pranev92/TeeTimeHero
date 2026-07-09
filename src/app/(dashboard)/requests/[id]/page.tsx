@@ -6,6 +6,7 @@ import { formatTime, DAY_LABELS } from "@/lib/utils";
 import { format } from "date-fns";
 import { ToggleRequestButton } from "@/components/dashboard/toggle-request-button";
 import { DeleteRequestButton } from "@/components/dashboard/delete-request-button";
+import { BookNowButton } from "@/components/dashboard/book-now-button";
 
 function statusVariant(s: string) {
   if (s === "SUCCESS") return "success" as const;
@@ -48,7 +49,8 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
             {DAY_LABELS[request.dayOfWeek]} · {formatTime(request.windowStart)}–{formatTime(request.windowEnd)} · {request.numPlayers} player{request.numPlayers !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <BookNowButton requestId={request.id} />
           <ToggleRequestButton id={request.id} isActive={request.isActive} />
           <DeleteRequestButton id={request.id} />
         </div>

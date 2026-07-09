@@ -7,12 +7,18 @@ const schema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
+  inviteCode: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, password } = schema.parse(body);
+    const { name, email, password, inviteCode } = schema.parse(body);
+
+    const requiredCode = process.env.INVITE_CODE;
+    if (requiredCode && inviteCode !== requiredCode) {
+      return NextResponse.json({ error: "Invalid invite code" }, { status: 403 });
+    }
 
     const existing = await db.user.findUnique({ where: { email } });
     if (existing) {

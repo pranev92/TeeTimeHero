@@ -7,7 +7,10 @@ function makeClient() {
   const url = process.env.DATABASE_URL?.startsWith("file:")
     ? `file:${path.resolve(process.env.DATABASE_URL.slice(5))}`
     : process.env.DATABASE_URL ?? `file:${path.resolve("dev.db")}`;
-  const adapter = new PrismaLibSql({ url });
+  const adapter = new PrismaLibSql({
+    url,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
