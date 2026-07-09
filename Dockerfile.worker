@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
 COPY package*.json ./
 RUN npm ci
 
+# Generate Prisma client
+RUN node_modules/.bin/prisma generate
+
 # Install Playwright's Chromium browser
 RUN node_modules/.bin/playwright install chromium
 
