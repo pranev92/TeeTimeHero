@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -134,6 +133,7 @@ model BookingJob {
   createdAt    DateTime  @default(now())
 
   bullJobId    String?
+  screenshotData Bytes?
 
   request BookingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   logs    BookingLog[]

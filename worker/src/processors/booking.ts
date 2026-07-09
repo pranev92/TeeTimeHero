@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getAutomation } from "@/lib/automation/registry";
 import { scheduleNextBooking } from "@/lib/scheduler";
 import type { BookingJobPayload } from "@/lib/scheduler";
+import { takeConfirmationScreenshot } from "../confirmation-screenshot";
 
 async function log(jobId: string, level: "INFO" | "WARN" | "ERROR", message: string, data?: object) {
   await db.bookingLog.create({ data: { jobId, level, message, data: data ? JSON.stringify(data) : undefined } });
@@ -51,6 +52,18 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
 
   if (result.success) {
     await log(bookingJobId, "INFO", `Booked! Time: ${result.confirmedTime}, Confirmation: ${result.confirmationId}`);
+
+    const screenshot = await takeConfirmationScreenshot({
+      courseName: request.course.name,
+      confirmedTime: result.confirmedTime!,
+      targetDate: new Date(targetDate),
+      numPlayers: request.numPlayers,
+      confirmationId: result.confirmationId!,
+    });
+    if (screenshot) {
+      await log(bookingJobId, "INFO", "Confirmation screenshot captured");
+    }
+
     await db.bookingJob.update({
       where: { id: bookingJobId },
       data: {
@@ -58,6 +71,7 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
         confirmedTime: result.confirmedTime,
         confirmationId: result.confirmationId,
         completedAt: new Date(),
+        screenshotData: screenshot ? new Uint8Array(screenshot) : undefined,
       },
     });
     // Schedule next occurrence

@@ -115,6 +115,20 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                     ))}
                   </div>
                 )}
+
+                {/* Booking confirmation screenshot */}
+                {job.screenshotData && (
+                  <div className="px-4 py-3 border-t border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-2">Booking confirmation</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/jobs/${job.id}/screenshot`}
+                      alt="Booking confirmation"
+                      className="rounded-lg max-w-full"
+                      style={{ maxWidth: 560 }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
