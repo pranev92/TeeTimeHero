@@ -18,8 +18,7 @@ import type { BookingOptions, BookingResult } from "../../base";
 
 const FACILITY_ID = 1745;
 const ALIAS = "browns-mill-fore-passholder";
-const WORDPRESS_URL = "https://www.cityofatlantagolf.com/browns-mill-fore-pass-member-tee-times/";
-const WORDPRESS_PASSWORD = "FOREPASSHOLDER";
+const TEEITUP_URL = "https://browns-mill-fore-passholder.book.teeitup.golf/";
 const TZ = "America/New_York";
 
 export class BrownsMillForePassAutomation {
@@ -65,18 +64,10 @@ export class BrownsMillForePassAutomation {
     try {
       const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
 
-      // Step 1: Unlock the WordPress-protected page
-      await page.goto(WORDPRESS_URL, { waitUntil: "networkidle", timeout: 30000 });
-      const wpPasswordInput = page.locator('input[name="post_password"]');
-      if (await wpPasswordInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await wpPasswordInput.fill(WORDPRESS_PASSWORD);
-        await Promise.all([
-          page.waitForLoadState("networkidle", { timeout: 15000 }),
-          page.keyboard.press("Enter"),
-        ]);
-      }
+      // Navigate directly to TeeItUp (avoids WordPress iframe issues)
+      await page.goto(TEEITUP_URL, { waitUntil: "networkidle", timeout: 30000 });
 
-      // Step 2: Log in to TeeItUp with the user's Fore Pass credentials
+      // Log in with Fore Pass credentials
       const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
       if (await emailInput.isVisible({ timeout: 8000 }).catch(() => false)) {
         await emailInput.fill(opts.siteUsername);
@@ -85,41 +76,58 @@ export class BrownsMillForePassAutomation {
           page.waitForLoadState("networkidle", { timeout: 20000 }),
           page.keyboard.press("Enter"),
         ]);
+      } else {
+        // Login might be behind a sign-in button
+        const signInBtn = page.getByRole("button", { name: /sign.?in|log.?in/i })
+          .or(page.getByRole("link", { name: /sign.?in|log.?in/i })).first();
+        if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await signInBtn.click();
+          await page.waitForTimeout(1000);
+          const emailInput2 = page.locator('input[type="email"], input[name="email"]').first();
+          if (await emailInput2.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await emailInput2.fill(opts.siteUsername);
+            await page.locator('input[type="password"]').first().fill(opts.sitePassword);
+            await Promise.all([
+              page.waitForLoadState("networkidle", { timeout: 20000 }),
+              page.keyboard.press("Enter"),
+            ]);
+          }
+        }
       }
 
-      // Navigate to the target date — try clicking date in calendar
+      // Navigate to the target date in calendar
       const dayNum = parseInt(formatInTimeZone(opts.targetDate, TZ, "d"), 10);
-      const today = parseInt(formatInTimeZone(new Date(), TZ, "d"), 10);
       const targetMonth = formatInTimeZone(opts.targetDate, TZ, "M");
       const currentMonth = formatInTimeZone(new Date(), TZ, "M");
 
-      // Advance calendar month if needed
       if (targetMonth !== currentMonth) {
-        const nextBtn = page.locator('button[aria-label*="next"], button[aria-label*="Next"], .next-month, [class*="next"]').first();
+        const nextBtn = page.locator('button[aria-label*="next" i], .next-month, [class*="next"]').first();
         if (await nextBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
           await nextBtn.click();
           await page.waitForTimeout(1000);
         }
       }
 
-      // Click the date number in the calendar
-      const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).nth(
-        // If target day number < today (same month), pick the second occurrence
-        targetMonth === currentMonth && dayNum < today ? 1 : 0
-      );
+      const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).first();
       if (await dateCell.isVisible({ timeout: 5000 }).catch(() => false)) {
         await dateCell.click();
         await page.waitForLoadState("networkidle", { timeout: 10000 });
       }
 
-      // Wait for tee times to load
       await page.waitForTimeout(2000);
 
+      // Take diagnostic screenshot to see what the browser actually sees
+      const diagScreenshot = await page.screenshot({ type: "png", fullPage: false });
+
       // Find the tee time card matching our target time
-      // TeeItUp shows times like "5:50 PM" or "6:30 PM"
       const timeText = page.getByText(displayTime, { exact: false }).first();
       if (!(await timeText.isVisible({ timeout: 8000 }).catch(() => false))) {
-        return { success: false, errorMessage: `Tee time ${displayTime} not found on booking page` };
+        // Return diagnostic screenshot so we can see what went wrong
+        return {
+          success: false,
+          errorMessage: `Tee time ${displayTime} not found on booking page`,
+          screenshotBuffer: diagScreenshot,
+        };
       }
 
       // Find the "CHOOSE RATE" button in the same card as the time
