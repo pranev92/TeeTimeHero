@@ -13,7 +13,7 @@ export function DeleteRequestButton({ id }: { id: string }) {
     setLoading(true);
     await fetch(`/api/requests/${id}`, { method: "DELETE" });
     setLoading(false);
-    router.refresh();
+    router.push("/requests");
   }
 
   return (
