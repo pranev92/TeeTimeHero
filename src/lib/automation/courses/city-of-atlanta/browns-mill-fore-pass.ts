@@ -71,26 +71,31 @@ export class BrownsMillForePassAutomation {
 
     try {
       const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
+      const localTime24 = bestSlot.localTime; // "18:30"
 
-      // Navigate directly to TeeItUp (avoids WordPress iframe issues)
-      // Use "load" not "networkidle" — SPAs keep polling and networkidle never fires
+      console.log(`[BM] Navigating to ${TEEITUP_URL}`);
       await page.goto(TEEITUP_URL, { waitUntil: "load", timeout: 60000 });
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(4000);
+      console.log(`[BM] Page loaded. URL: ${page.url()}`);
 
       // Log in with Fore Pass credentials
       const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
       if (await emailInput.isVisible({ timeout: 8000 }).catch(() => false)) {
+        console.log("[BM] Email input visible — filling credentials");
         await emailInput.fill(opts.siteUsername);
         await page.locator('input[type="password"]').first().fill(opts.sitePassword);
         await Promise.all([
           page.waitForLoadState("load", { timeout: 20000 }),
           page.keyboard.press("Enter"),
         ]);
+        await page.waitForTimeout(3000);
+        console.log(`[BM] After login. URL: ${page.url()}`);
       } else {
-        // Login might be behind a sign-in button
+        console.log("[BM] No email input — checking for sign-in button");
         const signInBtn = page.getByRole("button", { name: /sign.?in|log.?in/i })
           .or(page.getByRole("link", { name: /sign.?in|log.?in/i })).first();
         if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+          console.log("[BM] Sign-in button found — clicking");
           await signInBtn.click();
           await page.waitForTimeout(1000);
           const emailInput2 = page.locator('input[type="email"], input[name="email"]').first();
@@ -101,7 +106,10 @@ export class BrownsMillForePassAutomation {
               page.waitForLoadState("load", { timeout: 20000 }),
               page.keyboard.press("Enter"),
             ]);
+            await page.waitForTimeout(3000);
           }
+        } else {
+          console.log("[BM] No login UI found — assuming tee times visible without auth");
         }
       }
 
@@ -109,6 +117,7 @@ export class BrownsMillForePassAutomation {
       const dayNum = parseInt(formatInTimeZone(opts.targetDate, TZ, "d"), 10);
       const targetMonth = formatInTimeZone(opts.targetDate, TZ, "M");
       const currentMonth = formatInTimeZone(new Date(), TZ, "M");
+      console.log(`[BM] Navigating to day ${dayNum}, targetMonth=${targetMonth}, currentMonth=${currentMonth}`);
 
       if (targetMonth !== currentMonth) {
         const nextBtn = page.locator('button[aria-label*="next" i], .next-month, [class*="next"]').first();
@@ -120,32 +129,36 @@ export class BrownsMillForePassAutomation {
 
       const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).first();
       if (await dateCell.isVisible({ timeout: 5000 }).catch(() => false)) {
+        console.log(`[BM] Clicking date cell ${dayNum}`);
         await dateCell.click();
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(3000);
+      } else {
+        console.log(`[BM] Date cell ${dayNum} not found — skipping click`);
       }
-
-      await page.waitForTimeout(2000);
 
       // Take diagnostic screenshot to see what the browser actually sees
       const diagScreenshot = await page.screenshot({ type: "png", fullPage: false });
+      const bodyText = (await page.textContent("body").catch(() => "")).slice(0, 500);
+      console.log(`[BM] Page body preview: ${bodyText}`);
 
-      // Find the tee time — try multiple formats (SPA may render "6:30 PM", "6:30pm", "6:30")
+      // Find the tee time — try multiple formats: "6:30 PM", "6:30 pm", "6:30", "18:30"
       const timePart = displayTime.split(" ")[0]; // "6:30"
       const timeLocators = [
-        page.getByText(displayTime, { exact: false }),           // "6:30 PM"
-        page.getByText(displayTime.toLowerCase(), { exact: false }), // "6:30 pm"
+        page.getByText(displayTime, { exact: false }),               // "6:30 PM"
+        page.getByText(displayTime.toLowerCase(), { exact: false }),  // "6:30 pm"
         page.locator(`text=/${timePart.replace(":", "\\:")} ?[Pp][Mm]/`), // regex
-        page.getByText(timePart, { exact: false }),              // bare "6:30"
+        page.getByText(timePart, { exact: false }),                   // bare "6:30"
+        page.getByText(localTime24, { exact: false }),                // "18:30" (24h)
       ];
       let timeText = null;
       for (const loc of timeLocators) {
-        if (await loc.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await loc.first().isVisible({ timeout: 2000 }).catch(() => false)) {
           timeText = loc.first();
           break;
         }
       }
+      console.log(`[BM] Time text found: ${timeText !== null}`);
       if (!timeText) {
-        // Return diagnostic screenshot so we can see what went wrong
         return {
           success: false,
           errorMessage: `Tee time ${displayTime} not found on booking page`,
