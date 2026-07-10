@@ -179,62 +179,74 @@ export class BrownsMillForePassAutomation {
         };
       }
 
-      // Find the "CHOOSE RATE" button in the same card as the time
-      // Walk up ancestors until we find a container with a CHOOSE RATE button
-      let chooseRateBtn = null;
-      for (const selector of [
-        `xpath=//*/text()[contains(., "${displayTime}")]/ancestor::div[.//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'choose rate')]][1]//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'choose rate')]`,
-        `text=CHOOSE RATE >> nth=0`,
-        `button:has-text("CHOOSE RATE")`,
-        `button:has-text("Choose Rate")`,
-      ]) {
-        const btn = page.locator(selector).first();
-        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-          chooseRateBtn = btn;
-          break;
-        }
+      // Find the card containing BOTH the target time AND a CHOOSE RATE button,
+      // then click the CHOOSE RATE button within that card.
+      // Using filter() chains is more reliable than XPath ancestor traversal.
+      const chooseRateBtn = page
+        .locator("div, article, li, section")
+        .filter({ hasText: new RegExp(timePart, "i") })
+        .filter({ has: page.getByRole("button", { name: /choose rate/i }) })
+        .first()
+        .getByRole("button", { name: /choose rate/i });
+
+      if (!(await chooseRateBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
+        const s = await page.screenshot({ type: "png" });
+        return { success: false, errorMessage: `CHOOSE RATE not found for ${displayTime}`, screenshotBuffer: s };
       }
 
-      if (!chooseRateBtn) {
-        return { success: false, errorMessage: "Could not find CHOOSE RATE button" };
-      }
-
+      console.log(`[BM] Clicking CHOOSE RATE for ${displayTime}`);
       await chooseRateBtn.click();
-      await page.waitForTimeout(2000);
-
-      // Select Fore Pass / Walking rate if a rate selection screen appears
-      for (const rateSelector of [
-        'text=Fore Pass',
-        'text=Walking',
-        'button:has-text("Fore Pass")',
-        'button:has-text("Walking")',
-        '[class*="rate"]:has-text("Walking")',
-      ]) {
-        const rateEl = page.locator(rateSelector).first();
-        if (await rateEl.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await rateEl.click();
-          await page.waitForTimeout(500);
-          break;
-        }
-      }
-
-      // Click Book / Confirm / Complete button
-      const confirmBtn = page.getByRole("button", { name: /^(book|confirm|complete|reserve|checkout)/i }).first();
-      if (await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await confirmBtn.click();
-        await page.waitForTimeout(4000);
-      }
-
-      // Wait for confirmation to appear
       await page.waitForTimeout(3000);
 
-      // Take screenshot of the confirmation / post-booking page
+      const afterRateText = (await page.textContent("body").catch(() => null) ?? "").slice(0, 300);
+      console.log(`[BM] After CHOOSE RATE: ${afterRateText}`);
+
+      // Select Fore Pass / Walking rate if a rate selection modal appears
+      const rateLocators = [
+        page.getByRole("button", { name: /fore pass/i }),
+        page.getByRole("button", { name: /walking/i }),
+        page.getByText(/fore pass/i, { exact: false }),
+        page.getByText(/walking/i, { exact: false }),
+      ];
+      for (const rateLoc of rateLocators) {
+        if (await rateLoc.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+          console.log("[BM] Selecting rate option");
+          await rateLoc.first().click();
+          await page.waitForTimeout(2000);
+          break;
+        }
+      }
+
+      // Click the final Book / Confirm / Complete button
+      const confirmBtn = page
+        .getByRole("button", { name: /book|confirm|complete|reserve|checkout|proceed/i })
+        .first();
+      if (!(await confirmBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
+        const s = await page.screenshot({ type: "png" });
+        const pg = (await page.textContent("body").catch(() => null) ?? "").slice(0, 300);
+        console.log(`[BM] No confirm button found. Page: ${pg}`);
+        return { success: false, errorMessage: "Could not find booking confirm button", screenshotBuffer: s };
+      }
+
+      console.log("[BM] Clicking confirm button");
+      await confirmBtn.click();
+      await page.waitForTimeout(5000);
+
+      // Verify the booking actually confirmed
+      const finalText = (await page.textContent("body").catch(() => null) ?? "").toLowerCase();
+      console.log(`[BM] Final page text: ${finalText.slice(0, 300)}`);
       const screenshotBuffer = await page.screenshot({ type: "png", fullPage: false });
 
-      // Try to extract confirmation ID from the page
-      const pageText = await page.textContent("body").catch(() => "");
-      const confMatch = pageText?.match(/[0-9a-f]{24}/i);
+      const confirmed = /confirm|reserved|booking|thank you|success|reservation/.test(finalText);
+      if (!confirmed) {
+        return {
+          success: false,
+          errorMessage: "Booking flow completed but no confirmation text detected",
+          screenshotBuffer,
+        };
+      }
 
+      const confMatch = finalText.match(/[0-9a-f]{24}/i);
       return {
         success: true,
         confirmedTime: bestSlot.localTime,
