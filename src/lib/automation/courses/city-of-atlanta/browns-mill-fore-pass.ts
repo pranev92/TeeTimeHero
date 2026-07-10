@@ -1,14 +1,14 @@
 /**
  * Browns Mill Golf Course — Fore Pass Holder booking automation.
- * Uses the Kenna/TeeItUp REST API directly (no browser automation).
  *
- * Course constants (hardcoded — verified from network inspection):
- *   facilityId  : 1745
- *   courseId    : 54f14bf00c8ad60378b01a11
- *   alias       : browns-mill-fore-passholder
- *   timezone    : America/New_York
- *   GolfCourseId (cart/riding) : 135358  (tags: MO, CI)
- *   GolfCourseId (walking)     : 135355  (tags: WR)
+ * Uses the Kenna/TeeItUp REST API to find the best available slot,
+ * then confirms the booking via Playwright browser (the API checkout
+ * endpoints return success but don't reliably finalize reservations).
+ *
+ * Course constants:
+ *   facilityId : 1745
+ *   alias      : browns-mill-fore-passholder
+ *   timezone   : America/New_York
  */
 
 import { format, parseISO } from "date-fns";
@@ -16,10 +16,10 @@ import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { KennaClient, TeeTimeSlot, TeeTimeRate } from "./kenna-api";
 import type { BookingOptions, BookingResult } from "../../base";
 
-const FACILITY_ID  = 1745;
-const COURSE_ID    = "54f14bf00c8ad60378b01a11";
-const ALIAS        = "browns-mill-fore-passholder";
-const TZ           = "America/New_York";
+const FACILITY_ID = 1745;
+const ALIAS = "browns-mill-fore-passholder";
+const BOOKING_URL = "https://browns-mill-fore-passholder.book.teeitup.golf/";
+const TZ = "America/New_York";
 
 export class BrownsMillForePassAutomation {
   async attempt(opts: BookingOptions): Promise<BookingResult> {
@@ -27,13 +27,12 @@ export class BrownsMillForePassAutomation {
       return { success: false, errorMessage: "Fore Pass credentials required" };
     }
 
+    // Step 1: Use Kenna API to find the best available slot
     const client = new KennaClient(ALIAS);
+    let bestSlot: { slot: TeeTimeSlot; rate: TeeTimeRate; localTime: string } | null = null;
 
     try {
-      // 1. Authenticate
       await client.authenticate(opts.siteUsername, opts.sitePassword);
-
-      // 2. Fetch available tee times for the target date
       const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
       const teeTimes = await client.getTeeTimes(dateStr, FACILITY_ID);
       const slots: TeeTimeSlot[] = teeTimes.flatMap((d) => d.teetimes);
@@ -42,62 +41,166 @@ export class BrownsMillForePassAutomation {
         return { success: false, errorMessage: `No tee times available on ${dateStr}` };
       }
 
-      // 3. Find the best slot within the time window
       const best = selectBestSlot(slots, opts);
       if (!best) {
         return {
           success: false,
-          errorMessage: `No available slot between ${opts.windowStart} and ${opts.windowEnd} for ${opts.numPlayers} player(s)`,
+          errorMessage: `No available slot between ${opts.windowStart} and ${opts.windowEnd}`,
         };
       }
+      bestSlot = { ...best, localTime: toLocalHHMM(best.slot.teetime, TZ) };
+    } catch (err) {
+      return {
+        success: false,
+        errorMessage: `API error finding slot: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
 
-      const { slot, rate } = best;
-      const localTime = toLocalHHMM(slot.teetime, TZ);
+    // Step 2: Book through the browser (reliable — mirrors what user does manually)
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
 
-      // 4. Create shopping cart
-      const cart = await client.createCart();
+    try {
+      const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
+      const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
 
-      // 5. Add the selected tee time to the cart
-      const item = await client.addCartItem(cart.id, slot, rate, opts.numPlayers, FACILITY_ID);
+      await page.goto(BOOKING_URL, { waitUntil: "networkidle", timeout: 30000 });
 
-      // 6. Lock the tee time slot
-      await client.lockTeeTime(COURSE_ID, slot.teetime, opts.numPlayers);
-
-      // 7. Verify it's still bookable
-      const { bookable } = await client.isBookable(cart.id, item.id);
-      if (!bookable) {
-        return { success: false, errorMessage: "Slot became unavailable after lock" };
+      // Log in if not already authenticated
+      const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
+      if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await emailInput.fill(opts.siteUsername);
+        await page.locator('input[type="password"]').first().fill(opts.sitePassword);
+        await Promise.all([
+          page.waitForLoadState("networkidle", { timeout: 20000 }),
+          page.keyboard.press("Enter"),
+        ]);
       }
 
-      // 8. Create the order record
-      const order = await client.createOrder(cart.id);
+      // Navigate to the target date — try clicking date in calendar
+      const dayNum = parseInt(formatInTimeZone(opts.targetDate, TZ, "d"), 10);
+      const today = parseInt(formatInTimeZone(new Date(), TZ, "d"), 10);
+      const targetMonth = formatInTimeZone(opts.targetDate, TZ, "M");
+      const currentMonth = formatInTimeZone(new Date(), TZ, "M");
 
-      // 9. Finalize the tee time booking
-      await client.orderTeeTime(cart.id, item.id, slot.teetime, rate._id, opts.numPlayers);
+      // Advance calendar month if needed
+      if (targetMonth !== currentMonth) {
+        const nextBtn = page.locator('button[aria-label*="next"], button[aria-label*="Next"], .next-month, [class*="next"]').first();
+        if (await nextBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await nextBtn.click();
+          await page.waitForTimeout(1000);
+        }
+      }
+
+      // Click the date number in the calendar
+      const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).nth(
+        // If target day number < today (same month), pick the second occurrence
+        targetMonth === currentMonth && dayNum < today ? 1 : 0
+      );
+      if (await dateCell.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await dateCell.click();
+        await page.waitForLoadState("networkidle", { timeout: 10000 });
+      }
+
+      // Wait for tee times to load
+      await page.waitForTimeout(2000);
+
+      // Find the tee time card matching our target time
+      // TeeItUp shows times like "5:50 PM" or "6:30 PM"
+      const timeText = page.getByText(displayTime, { exact: false }).first();
+      if (!(await timeText.isVisible({ timeout: 8000 }).catch(() => false))) {
+        return { success: false, errorMessage: `Tee time ${displayTime} not found on booking page` };
+      }
+
+      // Find the "CHOOSE RATE" button in the same card as the time
+      // Walk up ancestors until we find a container with a CHOOSE RATE button
+      let chooseRateBtn = null;
+      for (const selector of [
+        `xpath=//*/text()[contains(., "${displayTime}")]/ancestor::div[.//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'choose rate')]][1]//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'choose rate')]`,
+        `text=CHOOSE RATE >> nth=0`,
+        `button:has-text("CHOOSE RATE")`,
+        `button:has-text("Choose Rate")`,
+      ]) {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          chooseRateBtn = btn;
+          break;
+        }
+      }
+
+      if (!chooseRateBtn) {
+        return { success: false, errorMessage: "Could not find CHOOSE RATE button" };
+      }
+
+      await chooseRateBtn.click();
+      await page.waitForLoadState("networkidle", { timeout: 10000 });
+      await page.waitForTimeout(1000);
+
+      // Select Fore Pass / Walking rate if a rate selection screen appears
+      for (const rateSelector of [
+        'text=Fore Pass',
+        'text=Walking',
+        'button:has-text("Fore Pass")',
+        'button:has-text("Walking")',
+        '[class*="rate"]:has-text("Walking")',
+      ]) {
+        const rateEl = page.locator(rateSelector).first();
+        if (await rateEl.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await rateEl.click();
+          await page.waitForTimeout(500);
+          break;
+        }
+      }
+
+      // Click Book / Confirm / Complete button
+      const confirmBtn = page.getByRole("button", { name: /^(book|confirm|complete|reserve|checkout)/i }).first();
+      if (await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await confirmBtn.click();
+        await page.waitForLoadState("networkidle", { timeout: 20000 });
+      }
+
+      // Wait for confirmation to appear
+      await page.waitForTimeout(3000);
+
+      // Take screenshot of the confirmation / post-booking page
+      const screenshotBuffer = await page.screenshot({ type: "png", fullPage: false });
+
+      // Try to extract confirmation ID from the page
+      const pageText = await page.textContent("body").catch(() => "");
+      const confMatch = pageText?.match(/[0-9a-f]{24}/i);
 
       return {
         success: true,
-        confirmedTime: localTime,
-        confirmationId: order.confirmationNumber ?? order.id,
+        confirmedTime: bestSlot.localTime,
+        confirmationId: confMatch?.[0] ?? bestSlot.localTime,
+        screenshotBuffer,
       };
     } catch (err) {
       return {
         success: false,
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: `Browser booking error: ${err instanceof Error ? err.message : String(err)}`,
       };
+    } finally {
+      await browser.close();
     }
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Convert a UTC ISO string to "HH:MM" in the course timezone */
 function toLocalHHMM(utcIso: string, tz: string): string {
   const local = toZonedTime(parseISO(utcIso), tz);
   return format(local, "HH:mm");
 }
 
-/** Pick the slot closest to preferredTime that fits within the window and allows numPlayers */
+function toDisplayTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 function selectBestSlot(
   slots: TeeTimeSlot[],
   opts: BookingOptions
@@ -106,8 +209,8 @@ function selectBestSlot(
   const [weH, weM] = opts.windowEnd.split(":").map(Number);
   const [prefH, prefM] = opts.preferredTime.split(":").map(Number);
   const windowStartMin = wsH * 60 + wsM;
-  const windowEndMin   = weH * 60 + weM;
-  const preferredMin   = prefH * 60 + prefM;
+  const windowEndMin = weH * 60 + weM;
+  const preferredMin = prefH * 60 + prefM;
 
   let best: { slot: TeeTimeSlot; rate: TeeTimeRate; diff: number } | null = null;
 
@@ -129,9 +232,7 @@ function selectBestSlot(
     if (!rate) continue;
 
     const diff = Math.abs(slotMin - preferredMin);
-    if (!best || diff < best.diff) {
-      best = { slot, rate, diff };
-    }
+    if (!best || diff < best.diff) best = { slot, rate, diff };
   }
 
   return best ? { slot: best.slot, rate: best.rate } : null;

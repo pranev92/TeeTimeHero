@@ -17,6 +17,7 @@ export interface BookingResult {
   confirmationId?: string;
   errorMessage?: string;
   screenshotPath?: string;
+  screenshotBuffer?: Uint8Array; // raw PNG bytes from browser automation
 }
 
 export abstract class BaseAutomation {

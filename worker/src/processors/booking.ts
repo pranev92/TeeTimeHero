@@ -53,17 +53,22 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
   if (result.success) {
     await log(bookingJobId, "INFO", `Booked! Time: ${result.confirmedTime}, Confirmation: ${result.confirmationId}`);
 
-    const screenshot = await takeConfirmationScreenshot({
-      courseName: request.course.name,
-      confirmedTime: result.confirmedTime!,
-      targetDate: new Date(targetDate),
-      numPlayers: request.numPlayers,
-      confirmationId: result.confirmationId!,
-      bookingUrl: request.course.bookingUrl ?? undefined,
-      siteUsername: request.siteUsername ?? undefined,
-      sitePassword: request.sitePassword ?? undefined,
-    });
-    if (screenshot) {
+    // Use screenshot from browser automation if available, otherwise capture separately
+    let screenshotData: Uint8Array | undefined = result.screenshotBuffer;
+    if (!screenshotData) {
+      const screenshot = await takeConfirmationScreenshot({
+        courseName: request.course.name,
+        confirmedTime: result.confirmedTime!,
+        targetDate: new Date(targetDate),
+        numPlayers: request.numPlayers,
+        confirmationId: result.confirmationId!,
+        bookingUrl: request.course.bookingUrl ?? undefined,
+        siteUsername: request.siteUsername ?? undefined,
+        sitePassword: request.sitePassword ?? undefined,
+      });
+      screenshotData = screenshot ? new Uint8Array(screenshot) : undefined;
+    }
+    if (screenshotData) {
       await log(bookingJobId, "INFO", "Confirmation screenshot captured");
     }
 
@@ -74,7 +79,7 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
         confirmedTime: result.confirmedTime,
         confirmationId: result.confirmationId,
         completedAt: new Date(),
-        screenshotData: screenshot ? new Uint8Array(screenshot) : undefined,
+        screenshotData,
       },
     });
     // Schedule next occurrence
