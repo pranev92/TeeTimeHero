@@ -91,7 +91,13 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
     if (job.attemptsMade + 1 >= job.opts.attempts!) {
       await db.bookingJob.update({
         where: { id: bookingJobId },
-        data: { status: "FAILED", errorMessage: result.errorMessage, completedAt: new Date() },
+        data: {
+          status: "FAILED",
+          errorMessage: result.errorMessage,
+          completedAt: new Date(),
+          // Save diagnostic screenshot so UI can show what the browser saw
+          screenshotData: result.screenshotBuffer ?? undefined,
+        },
       });
       // Still schedule next week even after failure
       await scheduleNextBooking(request);

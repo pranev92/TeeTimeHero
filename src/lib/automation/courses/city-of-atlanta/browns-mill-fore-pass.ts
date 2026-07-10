@@ -129,9 +129,22 @@ export class BrownsMillForePassAutomation {
       // Take diagnostic screenshot to see what the browser actually sees
       const diagScreenshot = await page.screenshot({ type: "png", fullPage: false });
 
-      // Find the tee time card matching our target time
-      const timeText = page.getByText(displayTime, { exact: false }).first();
-      if (!(await timeText.isVisible({ timeout: 8000 }).catch(() => false))) {
+      // Find the tee time — try multiple formats (SPA may render "6:30 PM", "6:30pm", "6:30")
+      const timePart = displayTime.split(" ")[0]; // "6:30"
+      const timeLocators = [
+        page.getByText(displayTime, { exact: false }),           // "6:30 PM"
+        page.getByText(displayTime.toLowerCase(), { exact: false }), // "6:30 pm"
+        page.locator(`text=/${timePart.replace(":", "\\:")} ?[Pp][Mm]/`), // regex
+        page.getByText(timePart, { exact: false }),              // bare "6:30"
+      ];
+      let timeText = null;
+      for (const loc of timeLocators) {
+        if (await loc.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+          timeText = loc.first();
+          break;
+        }
+      }
+      if (!timeText) {
         // Return diagnostic screenshot so we can see what went wrong
         return {
           success: false,

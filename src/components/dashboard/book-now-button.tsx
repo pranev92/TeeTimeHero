@@ -30,6 +30,9 @@ export function BookNowButton({ requestId, isActive }: { requestId: string; isAc
           setPhase("done");
         } else if (data.status === "FAILED" || data.status === "CANCELLED") {
           clearInterval(pollRef.current!);
+          if (data.hasScreenshot) {
+            setScreenshotUrl(`/api/jobs/${jobId}/screenshot`);
+          }
           setErrorMsg("Booking failed. Check the logs below.");
           setPhase("failed");
         }
@@ -147,6 +150,13 @@ export function BookNowButton({ requestId, isActive }: { requestId: string; isAc
               {l.message}
             </div>
           ))}
+        </div>
+      )}
+      {screenshotUrl && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1">Browser diagnostic screenshot:</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={screenshotUrl} alt="Diagnostic screenshot" className="rounded-lg w-full" />
         </div>
       )}
     </div>
