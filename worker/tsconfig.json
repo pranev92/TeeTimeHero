@@ -4,7 +4,8 @@
     "baseUrl": "..",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    "types": ["node"]
   },
   "include": ["src/**/*", "../src/lib/**/*", "../prisma/**/*"]
 }

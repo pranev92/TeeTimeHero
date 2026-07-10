@@ -59,6 +59,9 @@ export async function processBookingJob(job: Job<BookingJobPayload>) {
       targetDate: new Date(targetDate),
       numPlayers: request.numPlayers,
       confirmationId: result.confirmationId!,
+      bookingUrl: request.course.bookingUrl ?? undefined,
+      siteUsername: request.siteUsername ?? undefined,
+      sitePassword: request.sitePassword ?? undefined,
     });
     if (screenshot) {
       await log(bookingJobId, "INFO", "Confirmation screenshot captured");
