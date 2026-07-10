@@ -58,14 +58,24 @@ export class BrownsMillForePassAutomation {
 
     // Step 2: Book through the browser (reliable — mirrors what user does manually)
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
+    const browser = await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
 
     try {
       const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
 
       // Navigate directly to TeeItUp (avoids WordPress iframe issues)
-      await page.goto(TEEITUP_URL, { waitUntil: "networkidle", timeout: 30000 });
+      // Use "load" not "networkidle" — SPAs keep polling and networkidle never fires
+      await page.goto(TEEITUP_URL, { waitUntil: "load", timeout: 60000 });
+      await page.waitForTimeout(3000);
 
       // Log in with Fore Pass credentials
       const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
@@ -73,7 +83,7 @@ export class BrownsMillForePassAutomation {
         await emailInput.fill(opts.siteUsername);
         await page.locator('input[type="password"]').first().fill(opts.sitePassword);
         await Promise.all([
-          page.waitForLoadState("networkidle", { timeout: 20000 }),
+          page.waitForLoadState("load", { timeout: 20000 }),
           page.keyboard.press("Enter"),
         ]);
       } else {
@@ -88,7 +98,7 @@ export class BrownsMillForePassAutomation {
             await emailInput2.fill(opts.siteUsername);
             await page.locator('input[type="password"]').first().fill(opts.sitePassword);
             await Promise.all([
-              page.waitForLoadState("networkidle", { timeout: 20000 }),
+              page.waitForLoadState("load", { timeout: 20000 }),
               page.keyboard.press("Enter"),
             ]);
           }
@@ -111,7 +121,7 @@ export class BrownsMillForePassAutomation {
       const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).first();
       if (await dateCell.isVisible({ timeout: 5000 }).catch(() => false)) {
         await dateCell.click();
-        await page.waitForLoadState("networkidle", { timeout: 10000 });
+        await page.waitForTimeout(2000);
       }
 
       await page.waitForTimeout(2000);
@@ -151,8 +161,7 @@ export class BrownsMillForePassAutomation {
       }
 
       await chooseRateBtn.click();
-      await page.waitForLoadState("networkidle", { timeout: 10000 });
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(2000);
 
       // Select Fore Pass / Walking rate if a rate selection screen appears
       for (const rateSelector of [
@@ -174,7 +183,7 @@ export class BrownsMillForePassAutomation {
       const confirmBtn = page.getByRole("button", { name: /^(book|confirm|complete|reserve|checkout)/i }).first();
       if (await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
         await confirmBtn.click();
-        await page.waitForLoadState("networkidle", { timeout: 20000 });
+        await page.waitForTimeout(4000);
       }
 
       // Wait for confirmation to appear
