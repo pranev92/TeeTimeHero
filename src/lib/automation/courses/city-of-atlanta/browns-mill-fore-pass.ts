@@ -200,6 +200,13 @@ export class BrownsMillForePassAutomation {
       await addToCartBtn.click();
       await page.waitForTimeout(3000);
 
+      // Click inside the cart drawer body first (matches recorded step 5 — focuses/scrolls drawer)
+      const drawerBody = page.locator("[data-testid='shopping-cart-drawer'] > div.MuiPaper-root");
+      if (await drawerBody.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await drawerBody.click({ position: { x: 295, y: 374 } }).catch(() => {});
+        await page.waitForTimeout(500);
+      }
+
       // ── CHECKOUT (in cart drawer) ──────────────────────────────────────────
       const checkoutBtn = page.locator("[data-testid='shopping-cart-drawer-checkout-btn']");
       if (!(await checkoutBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
