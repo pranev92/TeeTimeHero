@@ -2,8 +2,8 @@
  * Browns Mill Golf Course — Fore Pass Holder booking automation.
  *
  * Uses the Kenna/TeeItUp REST API to find the best available slot,
- * then confirms the booking via Playwright browser (the API checkout
- * endpoints return success but don't reliably finalize reservations).
+ * then completes the booking via Playwright using real data-testid selectors
+ * captured from the TeeItUp SPA via Chrome DevTools Recorder.
  *
  * Course constants:
  *   facilityId : 1745
@@ -18,7 +18,7 @@ import type { BookingOptions, BookingResult } from "../../base";
 
 const FACILITY_ID = 1745;
 const ALIAS = "browns-mill-fore-passholder";
-const TEEITUP_URL = "https://browns-mill-fore-passholder.book.teeitup.golf/";
+const TEEITUP_BASE = "https://browns-mill-fore-passholder.book.teeitup.golf/";
 const TZ = "America/New_York";
 
 export class BrownsMillForePassAutomation {
@@ -34,7 +34,7 @@ export class BrownsMillForePassAutomation {
     let bestSlot: { slot: TeeTimeSlot; rate: TeeTimeRate; localTime: string } | null = null;
 
     try {
-      await client.authenticate(opts.siteUsername, opts.sitePassword);
+      await client.authenticate(siteUsername, sitePassword);
       const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
       const teeTimes = await client.getTeeTimes(dateStr, FACILITY_ID);
       const slots: TeeTimeSlot[] = teeTimes.flatMap((d) => d.teetimes);
@@ -58,7 +58,7 @@ export class BrownsMillForePassAutomation {
       };
     }
 
-    // Step 2: Book through the browser (reliable — mirrors what user does manually)
+    // Step 2: Book through the browser using exact selectors from Chrome DevTools Recorder
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({
       headless: true,
@@ -73,175 +73,182 @@ export class BrownsMillForePassAutomation {
 
     try {
       const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
-      const localTime24 = bestSlot.localTime; // "18:30"
+      const timePart = displayTime.split(" ")[0]; // "6:30"
+      const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
 
-      console.log(`[BM] Navigating to ${TEEITUP_URL}`);
-      await page.goto(TEEITUP_URL, { waitUntil: "load", timeout: 60000 });
+      // Navigate with date in URL — no calendar clicking needed
+      const bookingUrl = `${TEEITUP_BASE}?course=${FACILITY_ID}&date=${dateStr}&max=999999`;
+      console.log(`[BM] Navigating to ${bookingUrl}`);
+      await page.goto(bookingUrl, { waitUntil: "load", timeout: 60000 });
       await page.waitForTimeout(4000);
       console.log(`[BM] Page loaded. URL: ${page.url()}`);
 
-      // Log in with Fore Pass credentials
-      const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
-      if (await emailInput.isVisible({ timeout: 8000 }).catch(() => false)) {
-        console.log("[BM] Email input visible — filling credentials");
+      // ── Login ──────────────────────────────────────────────────────────────
+      const emailInput = page
+        .locator('input[type="email"], input[name="email"], input[name="username"]')
+        .first();
+
+      if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        console.log("[BM] Email input visible on page — filling credentials");
         await emailInput.fill(siteUsername);
         await page.locator('input[type="password"]').first().fill(sitePassword);
-        await Promise.all([
-          page.waitForLoadState("load", { timeout: 20000 }),
-          page.keyboard.press("Enter"),
-        ]);
-        await page.waitForTimeout(3000);
-        console.log(`[BM] After login. URL: ${page.url()}`);
+        const loginBtn = page.getByRole("button", { name: /^login$|^sign in$/i }).first();
+        if (await loginBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await loginBtn.click();
+        } else {
+          await page.keyboard.press("Enter");
+        }
+        await page.waitForTimeout(4000);
       } else {
-        console.log("[BM] No email input on page load — checking for sign-in button");
-        const signInBtn = page.getByRole("button", { name: /sign.?in|log.?in/i })
-          .or(page.getByRole("link", { name: /sign.?in|log.?in/i })).first();
+        // Login is behind a Sign In button
+        const signInBtn = page
+          .getByRole("button", { name: /sign.?in|log.?in/i })
+          .or(page.getByRole("link", { name: /sign.?in|log.?in/i }))
+          .first();
         if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-          console.log("[BM] Sign-in button found — clicking and waiting for modal");
+          console.log("[BM] Clicking Sign In button");
           await signInBtn.click();
-          // Wait longer for modal/drawer to animate open
-          await page.waitForTimeout(2000);
-          const emailInput2 = page.locator('input[type="email"], input[name="email"]').first();
+          await page.waitForTimeout(2000); // wait for modal to animate open
+
+          const emailInput2 = page
+            .locator('input[type="email"], input[name="email"]')
+            .first();
           if (await emailInput2.isVisible({ timeout: 8000 }).catch(() => false)) {
             console.log("[BM] Login modal open — filling credentials");
-            await emailInput2.fill(opts.siteUsername);
-            await page.locator('input[type="password"]').first().fill(opts.sitePassword);
-            // Click the Login button rather than pressing Enter (more reliable in modals)
-            const loginBtn = page.getByRole("button", { name: /^login$/i })
-              .or(page.getByRole("button", { name: /^sign in$/i })).first();
-            if (await loginBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await emailInput2.fill(siteUsername);
+            await page.locator('input[type="password"]').first().fill(sitePassword);
+            const loginBtn2 = page.getByRole("button", { name: /^login$|^sign in$/i }).first();
+            if (await loginBtn2.isVisible({ timeout: 3000 }).catch(() => false)) {
               console.log("[BM] Clicking Login button");
-              await loginBtn.click();
+              await loginBtn2.click();
             } else {
               await page.keyboard.press("Enter");
             }
             await page.waitForTimeout(5000);
             console.log(`[BM] After login. URL: ${page.url()}`);
           } else {
-            console.log("[BM] Login modal did not open — proceeding without login");
+            console.log("[BM] Login modal did not open — proceeding");
           }
         } else {
-          console.log("[BM] No login UI found — tee times visible without auth");
+          console.log("[BM] No login UI — tee times visible without auth");
         }
       }
 
-      // Navigate to the target date in calendar
-      const dayNum = parseInt(formatInTimeZone(opts.targetDate, TZ, "d"), 10);
-      const targetMonth = formatInTimeZone(opts.targetDate, TZ, "M");
-      const currentMonth = formatInTimeZone(new Date(), TZ, "M");
-      console.log(`[BM] Navigating to day ${dayNum}, targetMonth=${targetMonth}, currentMonth=${currentMonth}`);
-
-      if (targetMonth !== currentMonth) {
-        const nextBtn = page.locator('button[aria-label*="next" i], .next-month, [class*="next"]').first();
-        if (await nextBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await nextBtn.click();
-          await page.waitForTimeout(1000);
-        }
-      }
-
-      const dateCell = page.locator(`td:has-text("${dayNum}"), button:has-text("${dayNum}")`).first();
-      if (await dateCell.isVisible({ timeout: 5000 }).catch(() => false)) {
-        console.log(`[BM] Clicking date cell ${dayNum}`);
-        await dateCell.click();
+      // After login the SPA may redirect — navigate back to the date URL
+      if (!page.url().includes(dateStr)) {
+        console.log(`[BM] Re-navigating to date URL after login`);
+        await page.goto(bookingUrl, { waitUntil: "load", timeout: 30000 });
         await page.waitForTimeout(3000);
-      } else {
-        console.log(`[BM] Date cell ${dayNum} not found — skipping click`);
       }
 
-      // Take diagnostic screenshot to see what the browser actually sees
-      const diagScreenshot = await page.screenshot({ type: "png", fullPage: false });
-      const rawBodyText = await page.textContent("body").catch(() => null);
-      const bodyText = (rawBodyText ?? "").slice(0, 500);
-      console.log(`[BM] Page body preview: ${bodyText}`);
+      // ── Find the CHOOSE RATE button for the target time ────────────────────
+      // The buttons have data-testid='teetimes_choose_rate_button' and an
+      // aria-label containing the time, e.g. "...6:30:00 pm..."
+      const diagScreenshot = await page.screenshot({ type: "png" });
 
-      // Find the tee time — try multiple formats: "6:30 PM", "6:30 pm", "6:30", "18:30"
-      const timePart = displayTime.split(" ")[0]; // "6:30"
-      const timeLocators = [
-        page.getByText(displayTime, { exact: false }),               // "6:30 PM"
-        page.getByText(displayTime.toLowerCase(), { exact: false }),  // "6:30 pm"
-        page.locator(`text=/${timePart.replace(":", "\\:")} ?[Pp][Mm]/`), // regex
-        page.getByText(timePart, { exact: false }),                   // bare "6:30"
-        page.getByText(localTime24, { exact: false }),                // "18:30" (24h)
-      ];
-      let timeText = null;
-      for (const loc of timeLocators) {
-        if (await loc.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-          timeText = loc.first();
+      const allRateBtns = page.locator("[data-testid='teetimes_choose_rate_button']");
+      const btnCount = await allRateBtns.count().catch(() => 0);
+      console.log(`[BM] Found ${btnCount} CHOOSE RATE buttons on page`);
+
+      let chooseRateBtn = null;
+      for (let i = 0; i < btnCount; i++) {
+        const btn = allRateBtns.nth(i);
+        const ariaLabel = (await btn.getAttribute("aria-label").catch(() => "")) ?? "";
+        console.log(`[BM] Button[${i}] aria-label: ${ariaLabel}`);
+        if (ariaLabel.toLowerCase().includes(timePart)) {
+          chooseRateBtn = btn;
+          console.log(`[BM] Matched button[${i}] for ${timePart}`);
           break;
         }
       }
-      console.log(`[BM] Time text found: ${timeText !== null}`);
-      if (!timeText) {
-        return {
-          success: false,
-          errorMessage: `Tee time ${displayTime} not found on booking page`,
-          screenshotBuffer: diagScreenshot,
-        };
+
+      // Fallback: find by card container containing the time text
+      if (!chooseRateBtn && btnCount > 0) {
+        console.log("[BM] aria-label match failed — trying card container fallback");
+        chooseRateBtn = page
+          .locator("div, article, li, section")
+          .filter({ hasText: new RegExp(timePart.replace(":", "\\:"), "i") })
+          .filter({ has: page.locator("[data-testid='teetimes_choose_rate_button']") })
+          .first()
+          .locator("[data-testid='teetimes_choose_rate_button']");
       }
 
-      // Find the card containing BOTH the target time AND a CHOOSE RATE button,
-      // then click the CHOOSE RATE button within that card.
-      // Using filter() chains is more reliable than XPath ancestor traversal.
-      const chooseRateBtn = page
-        .locator("div, article, li, section")
-        .filter({ hasText: new RegExp(timePart, "i") })
-        .filter({ has: page.getByRole("button", { name: /choose rate/i }) })
-        .first()
-        .getByRole("button", { name: /choose rate/i });
-
-      if (!(await chooseRateBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
-        const s = await page.screenshot({ type: "png" });
-        return { success: false, errorMessage: `CHOOSE RATE not found for ${displayTime}`, screenshotBuffer: s };
+      if (!chooseRateBtn || !(await chooseRateBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
+        return {
+          success: false,
+          errorMessage: `CHOOSE RATE button not found for ${displayTime}`,
+          screenshotBuffer: diagScreenshot,
+        };
       }
 
       console.log(`[BM] Clicking CHOOSE RATE for ${displayTime}`);
       await chooseRateBtn.click();
       await page.waitForTimeout(3000);
 
-      const afterRateText = (await page.textContent("body").catch(() => null) ?? "").slice(0, 300);
-      console.log(`[BM] After CHOOSE RATE: ${afterRateText}`);
+      const afterChoose = (await page.textContent("body").catch(() => null) ?? "").slice(0, 200);
+      console.log(`[BM] After CHOOSE RATE: ${afterChoose}`);
 
-      // Select Fore Pass / Walking rate if a rate selection modal appears
-      const rateLocators = [
-        page.getByRole("button", { name: /fore pass/i }),
-        page.getByRole("button", { name: /walking/i }),
-        page.getByText(/fore pass/i, { exact: false }),
-        page.getByText(/walking/i, { exact: false }),
-      ];
-      for (const rateLoc of rateLocators) {
-        if (await rateLoc.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-          console.log("[BM] Selecting rate option");
-          await rateLoc.first().click();
-          await page.waitForTimeout(2000);
-          break;
-        }
-      }
-
-      // Click the final Book / Confirm / Complete button
-      const confirmBtn = page
-        .getByRole("button", { name: /book|confirm|complete|reserve|checkout|proceed/i })
-        .first();
-      if (!(await confirmBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
+      // ── Add to Cart ────────────────────────────────────────────────────────
+      const addToCartBtn = page.locator("[data-testid='add-to-cart-button']");
+      if (!(await addToCartBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
         const s = await page.screenshot({ type: "png" });
-        const pg = (await page.textContent("body").catch(() => null) ?? "").slice(0, 300);
-        console.log(`[BM] No confirm button found. Page: ${pg}`);
-        return { success: false, errorMessage: "Could not find booking confirm button", screenshotBuffer: s };
+        const pg = (await page.textContent("body").catch(() => null) ?? "").slice(0, 200);
+        console.log(`[BM] Add to Cart not found. Page: ${pg}`);
+        return { success: false, errorMessage: "Add to Cart button not found after CHOOSE RATE", screenshotBuffer: s };
+      }
+      console.log("[BM] Clicking Add to Cart");
+      await addToCartBtn.click();
+      await page.waitForTimeout(3000);
+
+      // ── CHECKOUT (in cart drawer) ──────────────────────────────────────────
+      const checkoutBtn = page.locator("[data-testid='shopping-cart-drawer-checkout-btn']");
+      if (!(await checkoutBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
+        const s = await page.screenshot({ type: "png" });
+        return { success: false, errorMessage: "CHECKOUT button not found in cart drawer", screenshotBuffer: s };
+      }
+      console.log("[BM] Clicking CHECKOUT");
+      await checkoutBtn.click();
+      await page.waitForTimeout(3000);
+
+      // ── Terms and Conditions ───────────────────────────────────────────────
+      const termsInput = page.locator(
+        "[data-testid='terms-and-conditions-checkbox'] input, [data-testid='terms-and-conditions-checkbox']"
+      ).first();
+      if (await termsInput.isVisible({ timeout: 8000 }).catch(() => false)) {
+        const checked = await termsInput.isChecked().catch(() => false);
+        if (!checked) {
+          console.log("[BM] Checking Terms and Conditions");
+          await termsInput.click();
+          await page.waitForTimeout(1000);
+        }
+      } else {
+        console.log("[BM] Terms checkbox not found — skipping");
       }
 
-      console.log("[BM] Clicking confirm button");
-      await confirmBtn.click();
-      await page.waitForTimeout(5000);
+      // ── COMPLETE YOUR PURCHASE ─────────────────────────────────────────────
+      const completeBtn = page
+        .getByRole("button", { name: /complete your purchase/i })
+        .first();
+      if (!(await completeBtn.isVisible({ timeout: 8000 }).catch(() => false))) {
+        const s = await page.screenshot({ type: "png" });
+        const pg = (await page.textContent("body").catch(() => null) ?? "").slice(0, 200);
+        console.log(`[BM] COMPLETE YOUR PURCHASE not found. Page: ${pg}`);
+        return { success: false, errorMessage: "COMPLETE YOUR PURCHASE button not found", screenshotBuffer: s };
+      }
+      console.log("[BM] Clicking COMPLETE YOUR PURCHASE");
+      await completeBtn.click();
+      await page.waitForTimeout(6000);
 
-      // Verify the booking actually confirmed
+      // ── Confirm success ────────────────────────────────────────────────────
       const finalText = (await page.textContent("body").catch(() => null) ?? "").toLowerCase();
-      console.log(`[BM] Final page text: ${finalText.slice(0, 300)}`);
+      console.log(`[BM] Final page: ${finalText.slice(0, 300)}`);
       const screenshotBuffer = await page.screenshot({ type: "png", fullPage: false });
 
       const confirmed = /confirm|reserved|booking|thank you|success|reservation/.test(finalText);
       if (!confirmed) {
         return {
           success: false,
-          errorMessage: "Booking flow completed but no confirmation text detected",
+          errorMessage: "No confirmation text found after COMPLETE YOUR PURCHASE",
           screenshotBuffer,
         };
       }
