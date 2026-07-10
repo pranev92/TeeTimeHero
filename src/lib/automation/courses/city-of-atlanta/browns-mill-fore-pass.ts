@@ -18,7 +18,8 @@ import type { BookingOptions, BookingResult } from "../../base";
 
 const FACILITY_ID = 1745;
 const ALIAS = "browns-mill-fore-passholder";
-const BOOKING_URL = "https://browns-mill-fore-passholder.book.teeitup.golf/";
+const WORDPRESS_URL = "https://www.cityofatlantagolf.com/browns-mill-fore-pass-member-tee-times/";
+const WORDPRESS_PASSWORD = "FOREPASSHOLDER";
 const TZ = "America/New_York";
 
 export class BrownsMillForePassAutomation {
@@ -62,14 +63,22 @@ export class BrownsMillForePassAutomation {
     const page = await browser.newPage();
 
     try {
-      const dateStr = formatInTimeZone(opts.targetDate, TZ, "yyyy-MM-dd");
       const displayTime = toDisplayTime(bestSlot.localTime); // "6:30 PM"
 
-      await page.goto(BOOKING_URL, { waitUntil: "networkidle", timeout: 30000 });
+      // Step 1: Unlock the WordPress-protected page
+      await page.goto(WORDPRESS_URL, { waitUntil: "networkidle", timeout: 30000 });
+      const wpPasswordInput = page.locator('input[name="post_password"]');
+      if (await wpPasswordInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await wpPasswordInput.fill(WORDPRESS_PASSWORD);
+        await Promise.all([
+          page.waitForLoadState("networkidle", { timeout: 15000 }),
+          page.keyboard.press("Enter"),
+        ]);
+      }
 
-      // Log in if not already authenticated
+      // Step 2: Log in to TeeItUp with the user's Fore Pass credentials
       const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
-      if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      if (await emailInput.isVisible({ timeout: 8000 }).catch(() => false)) {
         await emailInput.fill(opts.siteUsername);
         await page.locator('input[type="password"]').first().fill(opts.sitePassword);
         await Promise.all([
