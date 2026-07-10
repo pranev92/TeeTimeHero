@@ -58,7 +58,8 @@ export default function NewRequestPage() {
     setLoading(false);
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error?.message ?? data.error ?? "Failed to create request");
+      const msg = typeof data.error === "string" ? data.error : (data.error?.message ?? JSON.stringify(data.error) ?? "Failed to create request");
+      setError(msg);
       return;
     }
 

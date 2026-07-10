@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { scheduleNextBooking } from "@/lib/scheduler";
 
 const createSchema = z.object({
-  courseId: z.string().cuid(),
+  courseId: z.string().min(1),
   dayOfWeek: z.enum(["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"]),
   preferredTime: z.string().regex(/^\d{2}:\d{2}$/),
   windowStart: z.string().regex(/^\d{2}:\d{2}$/),
