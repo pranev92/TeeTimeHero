@@ -50,7 +50,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <BookNowButton requestId={request.id} />
+          <BookNowButton requestId={request.id} isActive={request.isActive} />
           <ToggleRequestButton id={request.id} isActive={request.isActive} />
           <DeleteRequestButton id={request.id} />
         </div>

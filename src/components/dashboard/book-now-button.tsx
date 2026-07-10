@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-export function BookNowButton({ requestId }: { requestId: string }) {
+export function BookNowButton({ requestId, isActive }: { requestId: string; isActive: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -22,7 +22,8 @@ export function BookNowButton({ requestId }: { requestId: string }) {
     setLoading(false);
     if (!res.ok) {
       const d = await res.json();
-      setError(d.error ?? "Failed to trigger booking");
+      const msg = typeof d.error === "string" ? d.error : "Failed to trigger booking";
+      setError(msg);
       return;
     }
     setOpen(false);
@@ -31,7 +32,13 @@ export function BookNowButton({ requestId }: { requestId: string }) {
 
   if (!open) {
     return (
-      <Button variant="ghost" className="border border-green-600 text-green-400 hover:bg-green-600/10" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        className="border border-green-600 text-green-400 hover:bg-green-600/10 disabled:opacity-40 disabled:cursor-not-allowed"
+        onClick={() => setOpen(true)}
+        disabled={!isActive}
+        title={!isActive ? "Unpause request to book" : undefined}
+      >
         Book Now
       </Button>
     );
