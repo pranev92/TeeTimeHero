@@ -26,6 +26,8 @@ export class BrownsMillForePassAutomation {
     if (!opts.siteUsername || !opts.sitePassword) {
       return { success: false, errorMessage: "Fore Pass credentials required" };
     }
+    const siteUsername = opts.siteUsername;
+    const sitePassword = opts.sitePassword;
 
     // Step 1: Use Kenna API to find the best available slot
     const client = new KennaClient(ALIAS);
@@ -82,8 +84,8 @@ export class BrownsMillForePassAutomation {
       const emailInput = page.locator('input[type="email"], input[name="email"], input[name="username"]').first();
       if (await emailInput.isVisible({ timeout: 8000 }).catch(() => false)) {
         console.log("[BM] Email input visible — filling credentials");
-        await emailInput.fill(opts.siteUsername);
-        await page.locator('input[type="password"]').first().fill(opts.sitePassword);
+        await emailInput.fill(siteUsername);
+        await page.locator('input[type="password"]').first().fill(sitePassword);
         await Promise.all([
           page.waitForLoadState("load", { timeout: 20000 }),
           page.keyboard.press("Enter"),
@@ -91,25 +93,35 @@ export class BrownsMillForePassAutomation {
         await page.waitForTimeout(3000);
         console.log(`[BM] After login. URL: ${page.url()}`);
       } else {
-        console.log("[BM] No email input — checking for sign-in button");
+        console.log("[BM] No email input on page load — checking for sign-in button");
         const signInBtn = page.getByRole("button", { name: /sign.?in|log.?in/i })
           .or(page.getByRole("link", { name: /sign.?in|log.?in/i })).first();
         if (await signInBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-          console.log("[BM] Sign-in button found — clicking");
+          console.log("[BM] Sign-in button found — clicking and waiting for modal");
           await signInBtn.click();
-          await page.waitForTimeout(1000);
+          // Wait longer for modal/drawer to animate open
+          await page.waitForTimeout(2000);
           const emailInput2 = page.locator('input[type="email"], input[name="email"]').first();
-          if (await emailInput2.isVisible({ timeout: 5000 }).catch(() => false)) {
+          if (await emailInput2.isVisible({ timeout: 8000 }).catch(() => false)) {
+            console.log("[BM] Login modal open — filling credentials");
             await emailInput2.fill(opts.siteUsername);
             await page.locator('input[type="password"]').first().fill(opts.sitePassword);
-            await Promise.all([
-              page.waitForLoadState("load", { timeout: 20000 }),
-              page.keyboard.press("Enter"),
-            ]);
-            await page.waitForTimeout(3000);
+            // Click the Login button rather than pressing Enter (more reliable in modals)
+            const loginBtn = page.getByRole("button", { name: /^login$/i })
+              .or(page.getByRole("button", { name: /^sign in$/i })).first();
+            if (await loginBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+              console.log("[BM] Clicking Login button");
+              await loginBtn.click();
+            } else {
+              await page.keyboard.press("Enter");
+            }
+            await page.waitForTimeout(5000);
+            console.log(`[BM] After login. URL: ${page.url()}`);
+          } else {
+            console.log("[BM] Login modal did not open — proceeding without login");
           }
         } else {
-          console.log("[BM] No login UI found — assuming tee times visible without auth");
+          console.log("[BM] No login UI found — tee times visible without auth");
         }
       }
 
@@ -138,7 +150,8 @@ export class BrownsMillForePassAutomation {
 
       // Take diagnostic screenshot to see what the browser actually sees
       const diagScreenshot = await page.screenshot({ type: "png", fullPage: false });
-      const bodyText = (await page.textContent("body").catch(() => "")).slice(0, 500);
+      const rawBodyText = await page.textContent("body").catch(() => null);
+      const bodyText = (rawBodyText ?? "").slice(0, 500);
       console.log(`[BM] Page body preview: ${bodyText}`);
 
       // Find the tee time — try multiple formats: "6:30 PM", "6:30 pm", "6:30", "18:30"
