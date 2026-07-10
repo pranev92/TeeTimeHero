@@ -69,16 +69,13 @@ export class BrownsMillForePassAutomation {
         return { success: false, errorMessage: "Slot became unavailable after lock" };
       }
 
-      // 8. Place the order
-      await client.createOrder(cart.id);
-
-      // 9. Finalize the tee time booking
-      const final = await client.orderTeeTime(cart.id, item.id, slot.teetime, rate._id, opts.numPlayers);
+      // 8. Place the order — this finalizes the booking
+      const order = await client.createOrder(cart.id);
 
       return {
         success: true,
         confirmedTime: localTime,
-        confirmationId: final.confirmationNumber ?? final.id,
+        confirmationId: order.confirmationNumber ?? order.id,
       };
     } catch (err) {
       return {
